@@ -1,0 +1,53 @@
+# autobot configuration.
+# Settings left out use the defaults shown here.
+
+[provider]
+# Any OpenAI-compatible chat completions endpoint.
+url = "http://localhost:11434/v1"
+model = "qwen3.5:9b"
+# The API key is read from this environment variable. Leave it unset for
+# local servers that need no key.
+api_key_env = "OPENAI_API_KEY"
+# Or run a command that prints the key, such as a password manager.
+# key_command = "pass show autobot/api-key"
+timeout = "5m"
+# The model's context window, in tokens.
+context_tokens = 32000
+
+[defaults]
+# Used when a task header leaves these out.
+schedule = "daily"
+max_rounds = 20
+# Longer tool outputs are cut, with a note to the model.
+max_tool_output_tokens = 3000
+# Maximum results from one list or grep call.
+max_results = 500
+command_timeout = "30s"
+
+[memory]
+# Size limit for each memory file.
+max_bytes = 8000
+
+[records]
+# Run records older than this are deleted.
+keep_days = 30
+
+[notify]
+# none, notify-send, ntfy or email.
+method = "none"
+# always, or failure to notify only when something failed.
+on = "always"
+# ntfy_url = "https://ntfy.sh/your-private-topic"
+
+# [notify.email]
+# host = "smtp.example.com"
+# port = 587
+# username = "me@example.com"
+# password_env = "AUTOBOT_SMTP_PASSWORD"
+# from = "me@example.com"
+# to = ["me@example.com"]
+
+[search]
+# Web search for tasks with `network: true`.
+provider = "kagi"
+api_key_env = "KAGI_API_KEY"
