@@ -190,11 +190,30 @@ Every attempt leaves a record, including runs that fail before the model is call
 
 ### Provider
 
-One interface with one real implementation: an OpenAI-compatible chat completions client. Tests use a second implementation that returns scripted replies, which is the reason for the interface.
+One interface with two real implementations, chosen by `provider.type`, and a third in tests that returns scripted replies:
 
-- The client accepts the variations local servers send: `null` content, content as a list of parts, and tool arguments as an object instead of a string.
-- Rate limits, server errors and network errors are retried twice with backoff. Other errors are not retried.
-- `autobot check` sends one small request that offers a test tool and asks the model to call it. This confirms the endpoint, the key and tool-call support. Many small local models fail this, and users should learn it before a scheduled run does.
+| Type | Implementation |
+|---|---|
+| `local` (default) | the OpenAI-compatible client, at `provider.url` |
+| `anthropic-api` | the same client, at Anthropic's OpenAI-compatible endpoint (`https://api.anthropic.com/v1`), with the key in `ANTHROPIC_API_KEY` |
+| `claude-cli` | a shim that runs each model turn as one `claude -p` process, so a Claude subscription pays |
+
+Settings a type does not use are errors: `url` only applies to `local`, the key settings do not apply to `claude-cli`, and `command` only applies to `claude-cli`. A Claude subscription token in the `anthropic-api` key is refused with a pointer to `claude-cli`. Anthropic describes its OpenAI-compatible layer as a testing aid: it ignores `response_format` and has no prompt caching. Reflection already validates and retries its answer, so this costs nothing in correctness.
+
+The `claude-cli` shim, adapted from skattarn's (its ADR 0015):
+
+- The command line is `claude -p --output-format json --model <model> --max-turns 1 --tools "" --strict-mcp-config --setting-sources "" --no-session-persistence --system-prompt-file <file>`. Claude Code's own tools, MCP servers, settings, hooks and session files stay out, and autobot's system prompt replaces Claude Code's. `--bare` is not used, because it only accepts an API key.
+- autobot's tools are described in the system prompt with their JSON Schemas. The model calls them by replying with `<tool_call>{"name": …, "arguments": …}</tool_call>` blocks, which the shim returns as ordinary tool calls, so the agent loop and the access checks are the same for every type. A block that is not valid JSON goes back to the model as a tool error instead of failing the run.
+- The conversation goes to stdin as JSON, with a line saying its text is data, not instructions.
+- The process runs in a new temporary folder that holds only the prompt file, so no `CLAUDE.md` is found, with `CLAUDE_CODE_DISABLE_CLAUDE_MDS`, `CLAUDE_CODE_DISABLE_AUTO_MEMORY` and `CLAUDE_CODE_DISABLE_ADVISOR_TOOL` set, and without `ANTHROPIC_API_KEY`, `ANTHROPIC_AUTH_TOKEN`, `ANTHROPIC_BASE_URL`, `CLAUDECODE` and `CLAUDE_CODE_ENTRYPOINT`, so it never bills an API key and also starts inside a Claude Code session.
+- `provider.timeout` kills the process group. Claude Code has no output token limit, and its own errors, such as a used-up plan, are reported as provider failures.
+- `autobot check` reads `claude auth status --json`, which makes no model call, and requires a `claude.ai` login, then runs the usual tool-call test through the shim.
+
+For all types:
+
+- The OpenAI-compatible client accepts the variations local servers send: `null` content, content as a list of parts, and tool arguments as an object instead of a string.
+- That client retries rate limits, server errors and network errors twice with backoff. Other errors are not retried, and the shim does not retry.
+- `autobot check` sends one small request that offers a test tool and asks the model to call it. This confirms the endpoint, the key and tool-call support, for every type. Many small local models fail this, and users should learn it before a scheduled run does.
 - Context limits are counted in tokens, estimated from text length and calibrated against the token counts the server reports. When the conversation nears the limit, the oldest tool outputs are replaced with a note. A single tool output longer than `defaults.max_tool_output_tokens` is cut, with a note telling the model what was cut and how to ask for less.
 - `<think>` blocks from reasoning models are removed from final answers.
 
@@ -221,7 +240,7 @@ One interface with one real implementation: an OpenAI-compatible chat completion
 
 Settings left out of `config.toml` use defaults. Unknown settings are errors.
 
-API keys come from the environment variable named by `provider.api_key_env` (`OPENAI_API_KEY` by default) or from `provider.api_key_command`, such as a password manager call. Autobot loads `~/.config/autobot/environment` itself, and the systemd unit reads the same file, so a manual run and a timer run see the same keys. For a manual run, a variable already set in the shell wins, which allows a one-off override. Keys are removed from run records, inbox outputs and memory.
+API keys come from the environment variable named by `provider.api_key_env` (`OPENAI_API_KEY` by default, `ANTHROPIC_API_KEY` for `anthropic-api`) or from `provider.api_key_command`, such as a password manager call. Autobot loads `~/.config/autobot/environment` itself, and the systemd unit reads the same file, so a manual run and a timer run see the same keys. For a manual run, a variable already set in the shell wins, which allows a one-off override. Keys are removed from run records, inbox outputs and memory.
 
 Autobot always gives the model the current date and time, the home folder, the output folder and its access, so tasks do not need to say them.
 

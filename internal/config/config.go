@@ -31,11 +31,27 @@ type Config struct {
 	Search   Search   `toml:"search"`
 }
 
+// Provider types.
+const (
+	// ProviderLocal is any OpenAI-compatible endpoint, such as a local server.
+	ProviderLocal = "local"
+	// ProviderClaudeCLI is a Claude subscription, through the claude command.
+	ProviderClaudeCLI = "claude-cli"
+	// ProviderAnthropicAPI is the Claude API, through Anthropic's
+	// OpenAI-compatible endpoint.
+	ProviderAnthropicAPI = "anthropic-api"
+)
+
+// AnthropicURL is the endpoint for ProviderAnthropicAPI.
+const AnthropicURL = "https://api.anthropic.com/v1"
+
 type Provider struct {
+	Type          string   `toml:"type"`
 	URL           string   `toml:"url"`
 	Model         string   `toml:"model"`
 	APIKeyEnv     string   `toml:"api_key_env"`
 	APIKeyCommand string   `toml:"api_key_command"`
+	Command       string   `toml:"command"`
 	Timeout       Duration `toml:"timeout"`
 	ContextWindow int      `toml:"context_window"`
 }
@@ -93,6 +109,7 @@ func (d *Duration) UnmarshalText(text []byte) error {
 func Default() Config {
 	return Config{
 		Provider: Provider{
+			Type:          ProviderLocal,
 			APIKeyEnv:     "OPENAI_API_KEY",
 			Timeout:       Duration{5 * time.Minute},
 			ContextWindow: 32000,
@@ -129,10 +146,42 @@ func Load(path string) (Config, error) {
 		sort.Strings(keys)
 		return cfg, fmt.Errorf("%s: unknown settings: %s", path, strings.Join(keys, ", "))
 	}
-	if err := cfg.Validate(); err != nil {
+	typeErr := cfg.Provider.applyType(func(key string) bool { return meta.IsDefined("provider", key) })
+	if err := errors.Join(typeErr, cfg.Validate()); err != nil {
 		return cfg, fmt.Errorf("%s: %w", path, err)
 	}
 	return cfg, nil
+}
+
+// applyType fills in the settings each provider type fixes, and rejects the
+// ones it does not use. set reports whether config.toml sets a provider key.
+func (p *Provider) applyType(set func(key string) bool) error {
+	var notUsed []string
+	for _, key := range map[string][]string{
+		ProviderLocal:        {"command"},
+		ProviderAnthropicAPI: {"url", "command"},
+		ProviderClaudeCLI:    {"url", "api_key_env", "api_key_command"},
+	}[p.Type] {
+		if set(key) {
+			notUsed = append(notUsed, "provider."+key)
+		}
+	}
+	switch p.Type {
+	case ProviderAnthropicAPI:
+		p.URL = AnthropicURL
+		if !set("api_key_env") {
+			p.APIKeyEnv = "ANTHROPIC_API_KEY"
+		}
+	case ProviderClaudeCLI:
+		p.APIKeyEnv = ""
+		if p.Command == "" {
+			p.Command = "claude"
+		}
+	}
+	if len(notUsed) > 0 {
+		return fmt.Errorf("%s not used with provider.type %q; remove it", strings.Join(notUsed, ", "), p.Type)
+	}
+	return nil
 }
 
 // Validate checks values that would otherwise fail later at run time.
@@ -140,6 +189,9 @@ func (c Config) Validate() error {
 	var errs []error
 	u, err := url.Parse(c.Provider.URL)
 	switch {
+	case !slices.Contains([]string{ProviderLocal, ProviderClaudeCLI, ProviderAnthropicAPI}, c.Provider.Type):
+		errs = append(errs, fmt.Errorf("provider.type must be %s, %s or %s, got %q", ProviderLocal, ProviderClaudeCLI, ProviderAnthropicAPI, c.Provider.Type))
+	case c.Provider.Type == ProviderClaudeCLI:
 	case c.Provider.URL == "":
 		errs = append(errs, errors.New("provider.url is not set"))
 	case err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "":
@@ -194,8 +246,26 @@ func (c Config) Validate() error {
 }
 
 // APIKey returns the provider key from api_key_command or api_key_env. An empty
-// key is valid: local servers often need none.
+// key is valid for a local server, which often needs none. claude-cli uses the
+// claude command's own login and has no key.
 func (p Provider) APIKey(ctx context.Context) (string, error) {
+	if p.Type == ProviderClaudeCLI {
+		return "", nil
+	}
+	key, err := p.rawKey(ctx)
+	if err != nil || p.Type != ProviderAnthropicAPI {
+		return key, err
+	}
+	switch {
+	case key == "":
+		return "", fmt.Errorf("no API key: set %s or provider.api_key_command", p.APIKeyEnv)
+	case strings.Contains(key, "sk-ant-oat"):
+		return "", errors.New(`the API key is a Claude subscription token; use provider.type = "claude-cli" for the subscription`)
+	}
+	return key, nil
+}
+
+func (p Provider) rawKey(ctx context.Context) (string, error) {
 	if p.APIKeyCommand != "" {
 		ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 		defer cancel()

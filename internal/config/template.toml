@@ -2,14 +2,24 @@
 # Settings left out use the defaults shown here.
 
 [provider]
-# Any OpenAI-compatible chat completions endpoint.
+# Who runs the model:
+#   local          any OpenAI-compatible endpoint, such as Ollama or llama.cpp
+#   claude-cli     your Claude subscription, through the claude command
+#                  (Claude Code); uses its login, so set no url or key
+#   anthropic-api  the Claude API, with an API key; set no url
+type = "local"
+# The endpoint, for local only.
 url = "http://localhost:11434/v1"
+# For Claude, a model such as "claude-haiku-5-5".
 model = "qwen3.5:9b"
-# The API key is read from this environment variable. Leave it unset for
-# local servers that need no key.
-api_key_env = "OPENAI_API_KEY"
+# The API key is read from this environment variable: OPENAI_API_KEY for
+# local and ANTHROPIC_API_KEY for anthropic-api, unless set here. A local
+# server that needs no key can leave it empty.
+# api_key_env = "OPENAI_API_KEY"
 # Or run a command that prints the key, such as a password manager.
 # api_key_command = "pass show autobot/api-key"
+# For claude-cli, the command to run, if claude is not on the PATH.
+# command = "claude"
 timeout = "5m"
 # The model's context window, in tokens.
 context_window = 32000

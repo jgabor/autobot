@@ -52,6 +52,10 @@ func TestLoadErrors(t *testing.T) {
 		"ntfy needs url": {base + "[notify]\nmethod = \"ntfy\"\n", "ntfy_url"},
 		"email fields":   {base + "[notify]\nmethod = \"email\"\n", "notify.email"},
 		"bad syntax":     {"[provider\n", "config.toml"},
+		"bad type":       {base + "type = \"openai\"\n", "provider.type must be"},
+		"local command":  {base + "command = \"claude\"\n", `provider.command not used with provider.type "local"`},
+		"api url":        {"[provider]\ntype = \"anthropic-api\"\nurl = \"http://x\"\nmodel = \"m\"\n", "provider.url not used"},
+		"cli key":        {"[provider]\ntype = \"claude-cli\"\nmodel = \"m\"\napi_key_env = \"K\"\napi_key_command = \"k\"\n", "provider.api_key_env, provider.api_key_command not used"},
 	}
 	for name, c := range cases {
 		_, err := Load(writeConfig(t, c.content))
@@ -62,6 +66,44 @@ func TestLoadErrors(t *testing.T) {
 	_, err := Load(filepath.Join(t.TempDir(), "missing.toml"))
 	if err == nil || !strings.Contains(err.Error(), "autobot init") {
 		t.Errorf("missing file: %v", err)
+	}
+}
+
+func TestProviderTypeDefaults(t *testing.T) {
+	cfg, err := Load(writeConfig(t, "[provider]\ntype = \"anthropic-api\"\nmodel = \"claude-haiku-5-5\"\n"))
+	if err != nil || cfg.Provider.URL != AnthropicURL || cfg.Provider.APIKeyEnv != "ANTHROPIC_API_KEY" {
+		t.Fatalf("anthropic-api: %+v %v", cfg.Provider, err)
+	}
+	cfg, err = Load(writeConfig(t, "[provider]\ntype = \"anthropic-api\"\nmodel = \"m\"\napi_key_env = \"MY_KEY\"\n"))
+	if err != nil || cfg.Provider.APIKeyEnv != "MY_KEY" {
+		t.Fatalf("anthropic-api with its own key variable: %+v %v", cfg.Provider, err)
+	}
+	cfg, err = Load(writeConfig(t, "[provider]\ntype = \"claude-cli\"\nmodel = \"haiku\"\n"))
+	if err != nil || cfg.Provider.Command != "claude" || cfg.Provider.APIKeyEnv != "" || cfg.Provider.URL != "" {
+		t.Fatalf("claude-cli: %+v %v", cfg.Provider, err)
+	}
+	cfg, err = Load(writeConfig(t, "[provider]\nurl = \"http://localhost:1\"\nmodel = \"m\"\n"))
+	if err != nil || cfg.Provider.Type != ProviderLocal || cfg.Provider.APIKeyEnv != "OPENAI_API_KEY" {
+		t.Fatalf("local by default: %+v %v", cfg.Provider, err)
+	}
+}
+
+func TestAnthropicAPIKey(t *testing.T) {
+	p := Provider{Type: ProviderAnthropicAPI, APIKeyEnv: "TEST_AUTOBOT_KEY"}
+	t.Setenv("TEST_AUTOBOT_KEY", "")
+	if _, err := p.APIKey(context.Background()); err == nil || !strings.Contains(err.Error(), "TEST_AUTOBOT_KEY") {
+		t.Errorf("empty key: %v", err)
+	}
+	t.Setenv("TEST_AUTOBOT_KEY", "sk-ant-oat01-abc")
+	if _, err := p.APIKey(context.Background()); err == nil || !strings.Contains(err.Error(), "claude-cli") {
+		t.Errorf("subscription token: %v", err)
+	}
+	t.Setenv("TEST_AUTOBOT_KEY", "sk-ant-api03-abc")
+	if key, err := p.APIKey(context.Background()); err != nil || key != "sk-ant-api03-abc" {
+		t.Errorf("API key: %q %v", key, err)
+	}
+	if key, err := (Provider{Type: ProviderClaudeCLI, APIKeyCommand: "exit 1"}).APIKey(context.Background()); err != nil || key != "" {
+		t.Errorf("claude-cli has no key: %q %v", key, err)
 	}
 }
 

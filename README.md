@@ -5,7 +5,7 @@ autobot runs recurring chores on your Linux machine with an AI model while nobod
 - Each task lists the paths it may read and write, and the code checks every file operation against those lists.
 - Each task has its own schedule: hourly, daily, weekly or a cron expression.
 - What autobot learns goes in a small Markdown file per task, versioned in git.
-- Any OpenAI-compatible endpoint works, including local servers such as Ollama, llama.cpp and vLLM.
+- It runs on a local model through any OpenAI-compatible endpoint (Ollama, llama.cpp, vLLM), on your Claude subscription through Claude Code, or on the Claude API.
 - It is one binary with no runtime dependencies, started by a systemd timer rather than a daemon.
 
 The design is in [docs/design.md](docs/design.md).
@@ -15,7 +15,7 @@ The design is in [docs/design.md](docs/design.md).
 ```bash
 CGO_ENABLED=0 go install github.com/jgabor/autobot/cmd/autobot@latest
 autobot init
-$EDITOR ~/.config/autobot/config.toml     # set provider.url and provider.model
+$EDITOR ~/.config/autobot/config.toml     # choose the provider and model
 autobot check                             # tests the provider and tool calling
 autobot run hello                         # runs the example task
 ```
@@ -29,6 +29,16 @@ loginctl enable-linger "$USER"            # keep running after you log out
 ```
 
 The model must support tool calling. `autobot check` tells you if it does not.
+
+`provider.type` picks who runs the model:
+
+| Type | Runs on | Needs |
+|---|---|---|
+| `local` (default) | any OpenAI-compatible endpoint | `provider.url`; a key only if the server wants one |
+| `claude-cli` | your Claude subscription, through `claude -p` | Claude Code installed and signed in (`claude auth login`) |
+| `anthropic-api` | the Claude API, through its OpenAI-compatible endpoint | an API key in `ANTHROPIC_API_KEY` |
+
+For Claude, set a model such as `claude-haiku-5-5`. With `claude-cli`, each model turn is one `claude -p` process with Claude Code's own tools, settings, MCP servers and `CLAUDE.md` files turned off; autobot's tools are described in the prompt and its access checks apply as usual. API keys in the environment are removed for that process, so the subscription pays, not an API key.
 
 If your provider needs an API key, put it in `~/.config/autobot/environment`:
 
@@ -139,10 +149,12 @@ autobot memory undo          # revert the last change; run again to go further b
 
 | Setting | Default | Meaning |
 |---|---|---|
-| `provider.url` | | OpenAI-compatible endpoint, such as `http://localhost:11434/v1` |
+| `provider.type` | `local` | `local`, `claude-cli` or `anthropic-api` |
+| `provider.url` | | OpenAI-compatible endpoint, such as `http://localhost:11434/v1` (`local` only) |
 | `provider.model` | | Model name |
-| `provider.api_key_env` | `OPENAI_API_KEY` | Environment variable that holds the key |
+| `provider.api_key_env` | `OPENAI_API_KEY`, or `ANTHROPIC_API_KEY` for `anthropic-api` | Environment variable that holds the key |
 | `provider.api_key_command` | | Command that prints the key |
+| `provider.command` | `claude` | The Claude Code command (`claude-cli` only) |
 | `provider.timeout` | `5m` | Per-request timeout |
 | `provider.context_window` | `32000` | The model's context window, in tokens |
 | `defaults.schedule` | `daily` | Schedule for tasks that set none |

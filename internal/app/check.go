@@ -66,6 +66,14 @@ func (a *App) Check(ctx context.Context, offline bool) error {
 
 	key, err := cfg.Provider.APIKey(ctx)
 	switch {
+	case cfg.Provider.Type == config.ProviderClaudeCLI:
+		cli := &provider.ClaudeCLI{Command: cfg.Provider.Command}
+		if login, lerr := cli.CheckClaudeLogin(ctx); lerr != nil {
+			c.fail("Claude login: %v", lerr)
+			err = lerr
+		} else {
+			c.ok("Claude login: %s (%s), through %s", login.Method, login.Subscription, cfg.Provider.Command)
+		}
 	case err != nil:
 		c.fail("API key: %v", err)
 	case cfg.Provider.APIKeyCommand != "":
@@ -193,7 +201,7 @@ func (a *App) checkProvider(ctx context.Context, c *checker, cfg config.Config, 
 		Tools: []provider.Tool{ping},
 	})
 	if err != nil {
-		c.fail("provider: %v. Check provider.url, provider.model and the API key", err)
+		c.fail("provider: %v. Check %s", err, providerHint(cfg.Provider.Type))
 		return
 	}
 	took := time.Since(start).Round(100 * time.Millisecond)
@@ -206,6 +214,16 @@ func (a *App) checkProvider(ctx context.Context, c *checker, cfg config.Config, 
 	}
 	c.fail("tool calls: %s replied without calling the test tool. autobot needs a model and server with tool calling support%s",
 		cfg.Provider.Model, replyHint(resp.Message.Content))
+}
+
+func providerHint(typ string) string {
+	switch typ {
+	case config.ProviderClaudeCLI:
+		return "provider.model and `claude auth status`"
+	case config.ProviderAnthropicAPI:
+		return "provider.model, the API key and the account's credit balance"
+	}
+	return "provider.url, provider.model and the API key"
 }
 
 func replyHint(s string) string {

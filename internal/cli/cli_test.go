@@ -386,6 +386,64 @@ func TestMovesAreRecorded(t *testing.T) {
 	}
 }
 
+func TestClaudeCLIProvider(t *testing.T) {
+	h := newHarness(t)
+	fake := filepath.Join(h.home, "fake-claude")
+	os.MkdirAll(fake, 0o755)
+	bin := h.write("bin/claude", `#!/bin/sh
+d="`+fake+`"
+if [ "$1" = auth ]; then echo '{"loggedIn":true,"authMethod":"claude.ai","subscriptionType":"max"}'; exit 0; fi
+n=$(( $(cat "$d/count" 2>/dev/null || echo 0) + 1 ))
+echo "$n" > "$d/count"
+cat > "$d/stdin.$n"
+cat "$d/reply.$n"
+`)
+	os.Chmod(bin, 0o755)
+	result := func(n int, text string) {
+		data, _ := json.Marshal(map[string]any{"type": "result", "is_error": false, "result": text, "usage": map[string]int{"input_tokens": 50, "output_tokens": 5}})
+		os.WriteFile(filepath.Join(fake, fmt.Sprintf("reply.%d", n)), data, 0o644)
+	}
+	result(1, `<tool_call>{"name": "ping", "arguments": {"message": "hello"}}</tool_call>`)
+	result(2, `<tool_call>{"name": "write", "arguments": {"path": "out.md", "content": "hi\n"}}</tool_call>`)
+	result(3, "Wrote out.md.")
+	result(4, "[]")
+	h.write(".config/autobot/config.toml", fmt.Sprintf("[provider]\ntype = \"claude-cli\"\nmodel = \"claude-haiku-5-5\"\ncommand = %q\n", bin))
+	h.write(".config/autobot/tasks/hello.md", "Write hi to out.md.\n")
+
+	h.expect(h.runReal("check"), 0)
+	for _, want := range []string{"ok    Claude login: claude.ai (max)", "ok    tool calls: claude-haiku-5-5 called the test tool"} {
+		if !strings.Contains(h.out.String(), want) {
+			t.Errorf("check missing %q:\n%s", want, h.out.String())
+		}
+	}
+	if strings.Contains(h.out.String(), "API key") {
+		t.Errorf("claude-cli has no API key:\n%s", h.out.String())
+	}
+
+	h.expect(h.runReal("run", "hello"), 0)
+	if got := h.read(".local/state/autobot/inbox/hello/out.md"); got != "hi\n" {
+		t.Errorf("out.md: %q", got)
+	}
+	runs, _ := record.List(h.paths.RunsDir())
+	if len(runs) != 1 || runs[0].Status != "completed" || runs[0].Tools["write"] != 1 || runs[0].PromptTokens != 100 {
+		t.Fatalf("runs: %+v", runs)
+	}
+	stdin, _ := os.ReadFile(filepath.Join(fake, "stdin.3"))
+	if !strings.Contains(string(stdin), `"role":"tool_result","tool":"write"`) {
+		t.Errorf("tool result not sent back:\n%s", stdin)
+	}
+}
+
+func TestProviderTypeSettings(t *testing.T) {
+	h := newHarness(t)
+	h.write(".config/autobot/tasks/hello.md", "Hi.\n")
+	h.write(".config/autobot/config.toml", "[provider]\ntype = \"claude-cli\"\nurl = \"http://x\"\nmodel = \"m\"\n")
+	h.expect(h.run("check", "--offline"), 1)
+	if !strings.Contains(h.out.String(), `provider.url not used with provider.type "claude-cli"`) {
+		t.Errorf("check:\n%s", h.out.String())
+	}
+}
+
 func TestDueSelectsTasksAndReportsBrokenFilesOnce(t *testing.T) {
 	h := newHarness(t)
 	h.config("[notify]\nmethod = \"ntfy\"\nntfy_url = \"https://ntfy.invalid/t\"\n")

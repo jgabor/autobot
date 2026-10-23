@@ -57,6 +57,9 @@ func New(p paths.Paths, out, errOut io.Writer) *App {
 		Err:   errOut,
 		Now:   time.Now,
 		NewProvider: func(c config.Provider, key string) provider.Provider {
+			if c.Type == config.ProviderClaudeCLI {
+				return &provider.ClaudeCLI{Command: c.Command, Timeout: c.Timeout.Duration}
+			}
 			return &provider.OpenAI{URL: c.URL, Key: key, Timeout: c.Timeout.Duration, Retries: 2, Backoff: 5 * time.Second}
 		},
 		NewSearcher: func(c config.Search) tools.Searcher {
