@@ -71,26 +71,26 @@ func TestAPIKey(t *testing.T) {
 	if err != nil || key != "from-env" {
 		t.Fatalf("env key %q %v", key, err)
 	}
-	key, err = Provider{APIKeyEnv: "TEST_AUTOBOT_KEY", KeyCommand: "echo '  from-command '"}.APIKey(context.Background())
+	key, err = Provider{APIKeyEnv: "TEST_AUTOBOT_KEY", APIKeyCommand: "echo '  from-command '"}.APIKey(context.Background())
 	if err != nil || key != "from-command" {
 		t.Fatalf("command key %q %v", key, err)
 	}
-	if _, err := (Provider{KeyCommand: "exit 3"}).APIKey(context.Background()); err == nil {
-		t.Fatal("failing key_command: want error")
+	if _, err := (Provider{APIKeyCommand: "exit 3"}).APIKey(context.Background()); err == nil {
+		t.Fatal("failing api_key_command: want error")
 	}
-	if _, err := (Provider{KeyCommand: "true"}).APIKey(context.Background()); err == nil {
-		t.Fatal("empty key_command output: want error")
+	if _, err := (Provider{APIKeyCommand: "true"}).APIKey(context.Background()); err == nil {
+		t.Fatal("empty api_key_command output: want error")
 	}
 }
 
-func TestKeyCommandTimeout(t *testing.T) {
+func TestAPIKeyCommandTimeout(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
 	defer cancel()
 	start := time.Now()
-	if _, err := (Provider{KeyCommand: "sleep 10 & sleep 10; echo k"}).APIKey(ctx); err == nil {
+	if _, err := (Provider{APIKeyCommand: "sleep 10 & sleep 10; echo k"}).APIKey(ctx); err == nil {
 		t.Fatal("want error")
 	}
 	if time.Since(start) > 4*time.Second {
-		t.Fatal("key_command outlived its deadline")
+		t.Fatal("api_key_command outlived its deadline")
 	}
 }

@@ -451,7 +451,7 @@ func TestAccessDeniedReachesTheModel(t *testing.T) {
 
 func TestKeysAreRedacted(t *testing.T) {
 	h := newHarness(t)
-	h.write(".config/autobot/config.toml", "[provider]\nurl = \"http://127.0.0.1:1/v1\"\nmodel = \"m\"\nkey_command = \"echo sk-very-secret\"\n")
+	h.write(".config/autobot/config.toml", "[provider]\nurl = \"http://127.0.0.1:1/v1\"\nmodel = \"m\"\napi_key_command = \"echo sk-very-secret\"\n")
 	h.write(".config/autobot/tasks/leak.md", "Leak.\n")
 	h.fake.Replies = []provider.Reply{provider.Text("The key is sk-very-secret."), provider.Text("[]")}
 	h.expect(h.run("run", "leak"), 0)
@@ -575,13 +575,13 @@ func TestProviderDownIsRetriedAndReportedOnce(t *testing.T) {
 	}
 }
 
-func TestKeyCommandFailureLeavesARecord(t *testing.T) {
+func TestAPIKeyCommandFailureLeavesARecord(t *testing.T) {
 	h := newHarness(t)
-	h.write(".config/autobot/config.toml", "[provider]\nurl = \"http://127.0.0.1:1/v1\"\nmodel = \"m\"\nkey_command = \"exit 1\"\n")
+	h.write(".config/autobot/config.toml", "[provider]\nurl = \"http://127.0.0.1:1/v1\"\nmodel = \"m\"\napi_key_command = \"exit 1\"\n")
 	h.write(".config/autobot/tasks/a.md", "A.\n")
 	h.expect(h.run("run", "a"), 1)
 	runs, _ := record.List(h.paths.RunsDir())
-	if len(runs) != 1 || runs[0].Status != "failed" || !strings.Contains(runs[0].Error, "key_command") {
+	if len(runs) != 1 || runs[0].Status != "failed" || !strings.Contains(runs[0].Error, "api_key_command") {
 		t.Fatalf("runs: %+v", runs)
 	}
 }

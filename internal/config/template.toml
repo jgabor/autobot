@@ -9,7 +9,7 @@ model = "qwen3.5:9b"
 # local servers that need no key.
 api_key_env = "OPENAI_API_KEY"
 # Or run a command that prints the key, such as a password manager.
-# key_command = "pass show autobot/api-key"
+# api_key_command = "pass show autobot/api-key"
 timeout = "5m"
 # The model's context window, in tokens.
 context_tokens = 32000

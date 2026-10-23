@@ -37,7 +37,7 @@ echo 'OPENAI_API_KEY=sk-...' >> ~/.config/autobot/environment
 chmod 600 ~/.config/autobot/environment
 ```
 
-Both manual runs and the timer read that file. You can use `provider.key_command` in `config.toml` instead, for example with a password manager.
+Both manual runs and the timer read that file. You can use `provider.api_key_command` in `config.toml` instead, for example with a password manager.
 
 ## Writing a task
 
@@ -139,7 +139,7 @@ autobot memory undo          # revert the last change; run again to go further b
 | `provider.url` | | OpenAI-compatible endpoint, such as `http://localhost:11434/v1` |
 | `provider.model` | | Model name |
 | `provider.api_key_env` | `OPENAI_API_KEY` | Environment variable that holds the key |
-| `provider.key_command` | | Command that prints the key |
+| `provider.api_key_command` | | Command that prints the key |
 | `provider.timeout` | `5m` | Per-request timeout |
 | `provider.context_tokens` | `32000` | The model's context window |
 | `defaults.schedule` | `daily` | Schedule for tasks that set none |

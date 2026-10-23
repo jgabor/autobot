@@ -35,7 +35,7 @@ type Provider struct {
 	URL           string   `toml:"url"`
 	Model         string   `toml:"model"`
 	APIKeyEnv     string   `toml:"api_key_env"`
-	KeyCommand    string   `toml:"key_command"`
+	APIKeyCommand string   `toml:"api_key_command"`
 	Timeout       Duration `toml:"timeout"`
 	ContextTokens int      `toml:"context_tokens"`
 }
@@ -193,13 +193,13 @@ func (c Config) Validate() error {
 	return errors.Join(errs...)
 }
 
-// APIKey returns the provider key from key_command or api_key_env. An empty
+// APIKey returns the provider key from api_key_command or api_key_env. An empty
 // key is valid: local servers often need none.
 func (p Provider) APIKey(ctx context.Context) (string, error) {
-	if p.KeyCommand != "" {
+	if p.APIKeyCommand != "" {
 		ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 		defer cancel()
-		cmd := exec.CommandContext(ctx, "sh", "-c", p.KeyCommand)
+		cmd := exec.CommandContext(ctx, "sh", "-c", p.APIKeyCommand)
 		// Kill the whole process group on timeout, and stop waiting for
 		// output soon after, so a stuck child cannot hold the run lock.
 		cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
@@ -207,11 +207,11 @@ func (p Provider) APIKey(ctx context.Context) (string, error) {
 		cmd.WaitDelay = 2 * time.Second
 		out, err := cmd.Output()
 		if err != nil {
-			return "", fmt.Errorf("provider.key_command failed: %w", err)
+			return "", fmt.Errorf("provider.api_key_command failed: %w", err)
 		}
 		key := strings.TrimSpace(string(out))
 		if key == "" {
-			return "", errors.New("provider.key_command printed nothing")
+			return "", errors.New("provider.api_key_command printed nothing")
 		}
 		return key, nil
 	}

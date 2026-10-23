@@ -68,8 +68,8 @@ func (a *App) Check(ctx context.Context, offline bool) error {
 	switch {
 	case err != nil:
 		c.fail("API key: %v", err)
-	case cfg.Provider.KeyCommand != "":
-		c.ok("API key: from key_command")
+	case cfg.Provider.APIKeyCommand != "":
+		c.ok("API key: from api_key_command")
 	case key == "" && cfg.Provider.APIKeyEnv != "":
 		c.warn("API key: %s is empty. That is fine for local servers that need no key", cfg.Provider.APIKeyEnv)
 	case key != "":

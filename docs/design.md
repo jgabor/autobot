@@ -183,7 +183,7 @@ Each task run writes a folder in `~/.local/state/autobot/runs/<timestamp>-<task>
 - `report.md` with status, duration, model, tools used, tokens, files written, the reflection outcome and the final answer.
 - `meta.json` with the same summary in a form `autobot log` reads.
 
-Every attempt leaves a record, including runs that fail before the model is called, such as a failing `key_command`. A run that was killed shows as incomplete. Records older than `records.keep_days` (30 by default) are pruned after each run.
+Every attempt leaves a record, including runs that fail before the model is called, such as a failing `api_key_command`. A run that was killed shows as incomplete. Records older than `records.keep_days` (30 by default) are pruned after each run.
 
 ### Provider
 
@@ -218,7 +218,7 @@ One interface with one real implementation: an OpenAI-compatible chat completion
 
 Settings left out of `config.toml` use defaults. Unknown settings are errors.
 
-API keys come from the environment variable named by `provider.api_key_env` (`OPENAI_API_KEY` by default) or from `provider.key_command`, such as a password manager call. Autobot loads `~/.config/autobot/environment` itself, and the systemd unit reads the same file, so a manual run and a timer run see the same keys. For a manual run, a variable already set in the shell wins, which allows a one-off override. Keys are removed from run records, inbox outputs and memory.
+API keys come from the environment variable named by `provider.api_key_env` (`OPENAI_API_KEY` by default) or from `provider.api_key_command`, such as a password manager call. Autobot loads `~/.config/autobot/environment` itself, and the systemd unit reads the same file, so a manual run and a timer run see the same keys. For a manual run, a variable already set in the shell wins, which allows a one-off override. Keys are removed from run records, inbox outputs and memory.
 
 Autobot always gives the model the current date and time, the home folder, the output folder and its access, so tasks do not need to say them.
 
