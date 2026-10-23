@@ -163,18 +163,7 @@ autobot log [-n N] [task]        List recent runs
 autobot show [run] [--full]      Show a run's report and transcript
 autobot memory diff [-n N]       Show the last memory changes
 autobot memory undo [--force]    Revert the last memory change
-autobot migrate [--from DIR]     Convert a v1 setup
 ```
-
-## Migrating from v1
-
-v1 was a Bash script with numbered task files and one `state.md`. Run:
-
-```bash
-autobot migrate
-```
-
-It moves `N-name.md` tasks to `tasks/name.md`, guesses their `read` and `write` paths from the task text, and disables them until you review the guesses. It also turns `0-system.md` into `system.md`, writes `config.toml` from your `AUTOBOT_*` settings, and imports `state.md` into shared memory. It never overwrites v2 files. It then prints the commands to replace the old service with the timer.
 
 ## Development
 

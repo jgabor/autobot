@@ -1,6 +1,7 @@
-# Autobot v2 design
+# Autobot design
 
-Status: implemented
+Design version: 1
+Status: implemented in autobot v0.1.0
 Author: Jonathan Gabor
 Date: 2026-10-20
 
@@ -8,32 +9,11 @@ Date: 2026-10-20
 
 Autobot runs recurring personal chores on a Linux machine with an AI model and no supervision. A chore is a plain-language Markdown file. Autobot runs it on a schedule, keeps what it learned, and leaves the result where the user will see it.
 
-This document describes the redesign. The product stays the same. Three things change:
+The design rests on three choices:
 
 1. Each task declares what it may read and write, and the code enforces it.
 2. Each task has its own schedule and its own memory.
-3. Autobot becomes a small Go binary instead of a Bash script.
-
-## Background: v1
-
-v1 was a single Bash script of about 750 lines, run by a user-level systemd unit.
-
-- Tasks were numbered Markdown files (`1-review-notes.md`, `2-audit-user-services.md`) in `~/.config/autobot/`. They ran in filename order. `0-system.md` held the system prompt and was required.
-- The model got five tools: Read, Write, Edit, Grep and Glob. There was no shell and no network tool.
-- After each run, a reflection step rewrote one shared `~/.local/state/autobot/state.md`. It had to contain fixed sections and exactly three "next-run improvements".
-- Scheduling used `Restart=always` with `RestartSec=1h` on a simple service, so the script reran an hour after each exit.
-- The provider was any OpenAI-compatible chat completions endpoint.
-
-Problems seen in v1:
-
-- **Writes were not scoped.** Write and Edit accepted any path the user could write, except the state file and system prompt. "Do not modify the originals" was only a request in the prompt.
-- **Bugs failed silently.** The Grep tool read a misnamed variable. Under `set -u` that part of the pipeline failed, and the tool reported "No matches found" on every call.
-- **Every chore ran on one schedule.** All tasks ran every hour. A weekly review and an hourly check could not coexist.
-- **One shared memory, rewritten whole.** Small models dropped facts when they rewrote the full file. There was no history, so a bad reflection could not be undone.
-- **Onboarding was manual.** Users had to write the system prompt from scratch and copy files into place. The environment file was only loaded by systemd, so a manual test run failed. A config error made systemd retry an hour later without telling anyone.
-- **Failures stopped the run.** One failed task stopped the rest of the run.
-- **Results were hard to find.** Output went to the journal or to files scattered across the user's folders.
-- **JSON was handled in Bash.** Every tool call started several `jq` processes, and quoting was fragile.
+3. Autobot is one small Go binary.
 
 ## Goals
 
@@ -42,7 +22,7 @@ Problems seen in v1:
 - Each task runs on its own schedule.
 - What autobot learns is visible, bounded, versioned and reversible.
 - Every run leaves a record that explains what it did and why.
-- Local models remain first-class. Any OpenAI-compatible endpoint works.
+- Local models are first-class. Any OpenAI-compatible endpoint works.
 - Install is one file with no runtime dependencies.
 
 ## Non-goals
@@ -255,7 +235,6 @@ Autobot always gives the model the current date and time, the home folder, the o
 | `autobot log [-n N] [task]` | List recent runs with status. |
 | `autobot show [run] [--full]` | Show one run's report and transcript. The run can be its ID, a unique ID prefix or a task name for its latest run. |
 | `autobot memory diff [-n N]` / `undo [--force]` | See or revert what reflection changed. |
-| `autobot migrate [--from DIR]` | Convert a v1 setup. |
 | `autobot version` | Print the version. |
 
 Errors name the next step, for example "no task named "notes" in ~/.config/autobot/tasks (see `autobot check`, or create it with `autobot new notes`)". Exit codes are 0 for success, 1 for failures and 2 for usage errors.
@@ -274,7 +253,7 @@ autobot run hello
 
 - Language: Go. One static binary (built with `CGO_ENABLED=0`), standard library first.
 - Dependencies: a TOML parser (BurntSushi/toml), a YAML parser for task headers (yaml.v3), a cron parser (robfig/cron), a pure Go git library (go-git), a unified diff writer (go-difflib) and the HTML tokenizer from golang.org/x/net.
-- Packages: `paths`, `config`, `task` (parse and validate), `schedule`, `lock`, `access` (path checks), `tools`, `provider`, `agent` (the loop), `memory`, `reflection`, `record`, `inbox`, `notify`, `migrate`, `app` (wires the parts together for each command) and `cli`.
+- Packages: `paths`, `config`, `task` (parse and validate), `schedule`, `lock`, `access` (path checks), `tools`, `provider`, `agent` (the loop), `memory`, `reflection`, `record`, `inbox`, `notify`, `app` (wires the parts together for each command) and `cli`.
 - The agent loop is the only place that talks to the provider during a task. Tools never call the provider. Reflection makes its own request after the loop ends.
 
 ### Testing
@@ -285,20 +264,18 @@ autobot run hello
 - **Scheduler:** due calculation across missed runs, clock changes, timer drift and new tasks.
 - **Tools:** every tool, including dry-run diffs, command allowlists and timeouts, refused local addresses and search through a test server.
 - **Provider:** the wire format against a test server, retries and error handling.
-- **CLI:** `init` on an empty home and on an existing setup, using a temporary `HOME`. A full run through a test server: tool calls, writes, inbox, digest, run record, schedule, memory, `log`, `show`, `memory diff` and `memory undo`. Dry runs, due selection, failures that do not stop other tasks, notifications, redaction, `check` and `migrate`.
+- **CLI:** `init` on an empty home and on an existing setup, using a temporary `HOME`. A full run through a test server: tool calls, writes, inbox, digest, run record, schedule, memory, `log`, `show`, `memory diff` and `memory undo`. Dry runs, due selection, failures that do not stop other tasks, notifications, redaction and `check`.
 
 ## Alternatives considered
 
-### Keep improving the Bash script
-
-Most of the user value comes from enforced access and per-task schedules. Both could be added to the Bash version.
+### Write it in Bash
 
 - **For:** one readable file, no build step, easy to audit in one sitting.
-- **Against:** correct path checks (symlinks, new files under linked folders) are hard to get right and to test in Bash. JSON handling through `jq` is slow and fragile. The v1 Grep bug shows how errors hide.
+- **Against:** correct path checks (symlinks, new files under linked folders) are hard to get right and to test in Bash. JSON handling through `jq` is slow and fragile, and errors in a pipeline are easy to miss.
 
-Decision: rewrite in Go before adding access control, not after.
+Decision: Go.
 
-### Keep one shared memory file
+### One shared memory file
 
 Simpler, but every task pays for every other task's memory in context. Unrelated facts also distract small models. Per-task memory with a small shared file keeps context relevant.
 
@@ -306,20 +283,7 @@ Simpler, but every task pays for every other task's memory in context. Unrelated
 
 A daemon could schedule precisely and watch files. It adds a process to supervise and a failure mode to debug. A timer that wakes every 15 minutes is precise enough for chores.
 
-## Migration from v1
-
-`autobot migrate` reads a v1 config folder and:
-
-1. Moves `N-name.md` to `tasks/name.md` with `schedule: hourly`. That matches v1 behavior.
-2. Adds `read` and `write` headers guessed from paths named in the task text, marked with a `# review` comment. A path in a sentence about writing or saving is a write path; any other path is a read path, cut back to the folder before its first glob character. The command prints each guess.
-3. Uses `0-system.md` as `system.md`.
-4. Writes `config.toml` from the v1 `AUTOBOT_*` settings in the environment or the `environment` file, looking first in the v1 folder. API keys stay in the `environment` file.
-5. Copies v1 `state.md` into `memory/shared.md`, mapping its sections to the new ones, and commits it.
-6. Prints the commands to replace the old service with the new timer.
-
-Tasks with unreviewed headers are disabled until the user confirms them. Guessed permissions must not grant access silently. Migration never overwrites a v2 file, and running it twice changes nothing.
-
-## Decisions on earlier open questions
+## Resolved questions
 
 1. **Parallel tasks:** no. Due tasks run one after another, because local models usually serve one request at a time.
 2. **Timer granularity:** a fixed 15 minute timer. Finer cron schedules run at the next check.

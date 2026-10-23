@@ -526,21 +526,6 @@ func TestUsageErrors(t *testing.T) {
 	}
 }
 
-func TestMigrateCommand(t *testing.T) {
-	h := newHarness(t)
-	h.write(".config/autobot/1-review.md", "Review `~/notes`. Write a summary to `~/notes/summary.md`.\n")
-	h.expect(h.run("migrate"), 0)
-	for _, want := range []string{"moved 1-review.md", "guessed read:  ~/notes", "guessed write: ~/notes/summary.md", "systemctl --user enable --now autobot.timer"} {
-		if !strings.Contains(h.out.String(), want) {
-			t.Errorf("migrate output missing %q:\n%s", want, h.out.String())
-		}
-	}
-	h.expect(h.run("migrate"), 0)
-	if !strings.Contains(h.out.String(), "Nothing to migrate") {
-		t.Errorf("second migrate:\n%s", h.out.String())
-	}
-}
-
 func TestEnvironmentFile(t *testing.T) {
 	dir := t.TempDir()
 	p := filepath.Join(dir, "environment")

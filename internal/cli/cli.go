@@ -28,7 +28,6 @@ Usage:
   autobot show [run] [--full]      Show a run's report and transcript (default: the latest run)
   autobot memory diff [-n N]       Show the last memory changes
   autobot memory undo [--force]    Revert the last memory change
-  autobot migrate [--from DIR]     Convert a v1 setup
   autobot version                  Print the version
 
 Files:
@@ -209,16 +208,6 @@ func dispatch(ctx context.Context, a *app.App, cmd string, args []string) error 
 			return a.MemoryUndo(*force)
 		}
 		return usagef("unknown memory command %q", sub)
-	case "migrate":
-		from := fs.String("from", "", "v1 config folder (default: ~/.config/autobot)")
-		pos, err := parse(fs, args)
-		if err != nil {
-			return err
-		}
-		if len(pos) > 0 {
-			return usagef("usage: autobot migrate [--from DIR]")
-		}
-		return a.Migrate(*from)
 	}
 	return usagef("unknown command %q", cmd)
 }
