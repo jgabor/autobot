@@ -35,6 +35,7 @@ type Meta struct {
 	CompletionTokens int            `json:"completion_tokens"`
 	Output           string         `json:"output,omitempty"`
 	FilesWritten     []string       `json:"files_written,omitempty"`
+	FilesMoved       []string       `json:"files_moved,omitempty"`
 	Reflection       string         `json:"reflection,omitempty"`
 }
 

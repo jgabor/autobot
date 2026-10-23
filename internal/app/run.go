@@ -397,6 +397,9 @@ func (a *App) runTask(ctx context.Context, cfg config.Config, prov provider.Prov
 	for _, w := range toolset.Written() {
 		meta.FilesWritten = append(meta.FilesWritten, a.tilde(w))
 	}
+	for _, m := range toolset.Moved() {
+		meta.FilesMoved = append(meta.FilesMoved, a.tilde(m.From)+" -> "+a.tilde(m.To))
+	}
 	if runErr != nil {
 		meta.Status = "failed"
 		meta.Error = runErr.Error()
@@ -449,6 +452,12 @@ func (a *App) finishDryRun(t *task.Task, res agent.Result, runErr error, toolset
 		fmt.Fprintf(a.Err, "%s: failed: %v\n", t.ID, runErr)
 	} else {
 		a.printf("\n--- final answer ---\n%s\n", res.Final)
+	}
+	if moves := toolset.Moved(); len(moves) > 0 {
+		a.printf("\n--- moves that would be made (later tool calls in this dry run did not see them) ---\n")
+		for _, m := range moves {
+			a.printf("%s -> %s\n", a.tilde(m.From), a.tilde(m.To))
+		}
 	}
 	changes := toolset.Changes()
 	if len(changes) == 0 {
@@ -533,6 +542,9 @@ func (a *App) report(m record.Meta, final string) string {
 	if len(m.FilesWritten) > 0 {
 		fmt.Fprintf(&b, "- Files written: %s\n", strings.Join(m.FilesWritten, ", "))
 	}
+	if len(m.FilesMoved) > 0 {
+		fmt.Fprintf(&b, "- Files moved: %d\n", len(m.FilesMoved))
+	}
 	if m.Reflection != "" {
 		fmt.Fprintf(&b, "- Reflection: %s\n", m.Reflection)
 	}
@@ -541,6 +553,12 @@ func (a *App) report(m record.Meta, final string) string {
 	}
 	if final != "" {
 		fmt.Fprintf(&b, "\n## Final answer\n\n%s\n", strings.TrimSpace(final))
+	}
+	if len(m.FilesMoved) > 0 {
+		b.WriteString("\n## Files moved\n\n")
+		for _, mv := range m.FilesMoved {
+			fmt.Fprintf(&b, "- %s\n", mv)
+		}
 	}
 	return b.String()
 }

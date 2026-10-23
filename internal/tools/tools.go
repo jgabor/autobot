@@ -40,6 +40,7 @@ type Set struct {
 	original map[string]*string
 	touched  []string
 	written  map[string]bool
+	moves    []Move
 }
 
 // New builds a tool set.
@@ -136,6 +137,10 @@ func (s *Set) Definitions() []provider.Tool {
 			"new_string":  str("Replacement text."),
 			"replace_all": map[string]any{"type": "boolean", "description": "Replace every occurrence."},
 		}, "path", "old_string", "new_string")),
+		tool("move", "Move or rename a file or folder. Both paths must be writable. Never overwrites: an existing destination file is an error. Moving a file to a folder (an existing one, or a path ending in /) keeps its name. Moving a folder onto an existing folder merges them: every entry is moved in, then the empty source folder is removed; if any name already exists, nothing is moved.", object(map[string]any{
+			"from": str("File or folder to move."),
+			"to":   str("New path, or a folder to move into."),
+		}, "from", "to")),
 	}
 	if len(s.o.Commands) > 0 {
 		defs = append(defs, tool("run_command",
@@ -205,6 +210,12 @@ func (s *Set) Call(ctx context.Context, name, arguments string) (out string, err
 			return "", err
 		}
 		return s.edit(a)
+	case "move":
+		var a moveArgs
+		if err := decode(&a); err != nil {
+			return "", err
+		}
+		return s.move(a)
 	case "run_command":
 		if len(s.o.Commands) == 0 {
 			break

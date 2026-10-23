@@ -100,8 +100,11 @@ More examples are in [examples/tasks](examples/tasks).
 | `read`, `list`, `grep` | a `read` path, or the output folder |
 | `write` | a `write` path, or the output folder |
 | `edit` | a path that is both readable and writable |
+| `move` | a `write` path, or the output folder, for both the old and the new path |
 | `run_command` | `commands` |
 | `web_search`, `web_fetch` | `network: true` (search uses Kagi; set `KAGI_API_KEY`) |
+
+`move` never overwrites a file. Moving a folder onto an existing folder merges the two. No tool deletes files.
 
 There is no shell. Allowed commands run in an empty temporary folder with a timeout. `web_fetch` refuses local and private addresses. Tasks with `network: true` do not see or change shared memory.
 

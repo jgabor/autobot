@@ -262,7 +262,7 @@ func TestRunEndToEnd(t *testing.T) {
 	for _, tool := range srv.requests[0]["tools"].([]any) {
 		names = append(names, tool.(map[string]any)["function"].(map[string]any)["name"].(string))
 	}
-	if strings.Join(names, ",") != "read,list,grep,write,edit" {
+	if strings.Join(names, ",") != "read,list,grep,write,edit,move" {
 		t.Errorf("tools offered: %v", names)
 	}
 	// The second request includes the tool results.
@@ -352,6 +352,37 @@ func TestDryRunWritesNothing(t *testing.T) {
 	}
 	if len(h.fake.Requests) != 3 {
 		t.Errorf("dry run must not reflect: %d requests", len(h.fake.Requests))
+	}
+}
+
+func TestMovesAreRecorded(t *testing.T) {
+	h := newHarness(t)
+	h.config("")
+	h.write(".config/autobot/tasks/sort.md", "---\nread: [~/dl]\nwrite: [~/dl/]\n---\nSort my downloads.\n")
+	h.write("dl/a.pdf", "a")
+	move := provider.Calls(provider.Call("c1", "move", `{"from":"~/dl/a.pdf","to":"~/dl/Documents/"}`))
+
+	h.fake.Replies = []provider.Reply{move, provider.Text("Sorted.")}
+	h.expect(h.run("run", "sort", "--dry-run"), 0)
+	if out := h.out.String(); !strings.Contains(out, "moves that would be made") || !strings.Contains(out, "~/dl/a.pdf -> ~/dl/Documents/a.pdf") {
+		t.Errorf("dry run output:\n%s", out)
+	}
+	if _, err := os.Stat(filepath.Join(h.home, "dl/a.pdf")); err != nil {
+		t.Fatal("dry run moved the file")
+	}
+
+	h.fake.Replies = []provider.Reply{move, provider.Text("Sorted."), provider.Text("[]")}
+	h.expect(h.run("run", "sort"), 0)
+	if _, err := os.Stat(filepath.Join(h.home, "dl/Documents/a.pdf")); err != nil {
+		t.Fatal("file was not moved")
+	}
+	runs, _ := record.List(h.paths.RunsDir())
+	if len(runs) != 1 || len(runs[0].FilesMoved) != 1 || runs[0].FilesMoved[0] != "~/dl/a.pdf -> ~/dl/Documents/a.pdf" {
+		t.Fatalf("runs: %+v", runs)
+	}
+	h.expect(h.run("show", "sort"), 0)
+	if out := h.out.String(); !strings.Contains(out, "- Files moved: 1") || !strings.Contains(out, "## Files moved\n\n- ~/dl/a.pdf -> ~/dl/Documents/a.pdf") {
+		t.Errorf("report:\n%s", out)
 	}
 }
 

@@ -117,10 +117,13 @@ A later version may add Linux Landlock as a second layer at the operating-system
 | `read`, `list` (glob), `grep` | the output folder and `read` paths |
 | `write` | the output folder and `write` paths |
 | `edit` | paths that are both readable and writable |
+| `move` | the output folder and `write` paths, for both the old and the new path |
 | `run_command` | only offered with `commands` |
 | `web_search`, `web_fetch` | only offered with `network: true` |
 
 The file tools are always offered, since every task has its output folder. `run_command` and the web tools are not offered at all to a task without the permission. Tools return clear errors when access is denied, naming the path, the allowed paths and the header field to change, so the model can change course instead of guessing. `edit` requires its text to appear exactly once unless `replace_all` is set. It needs read access too, because its answer would reveal whether text is in the file. `list` supports `**`; it does not support `{a,b}` and says so.
+
+`move` moves or renames a file or folder and never overwrites: an existing destination file is an error. A file moved to a folder keeps its name. A folder moved onto an existing folder is merged into it, and the empty source folder is removed; if any name already exists in the destination, nothing is moved. `move` refuses symlinks, a folder listed under `write:` itself, and a folder moved into itself. It does not copy between file systems. There is no tool that deletes files.
 
 ### Outputs and the inbox
 
@@ -180,7 +183,7 @@ A systemd user timer runs `autobot run --due` every 15 minutes. Autobot stores e
 Each task run writes a folder in `~/.local/state/autobot/runs/<timestamp>-<task>/`:
 
 - `transcript.jsonl` with every message and tool call.
-- `report.md` with status, duration, model, tools used, tokens, files written, the reflection outcome and the final answer.
+- `report.md` with status, duration, model, tools used, tokens, files written, files moved, the reflection outcome and the final answer.
 - `meta.json` with the same summary in a form `autobot log` reads.
 
 Every attempt leaves a record, including runs that fail before the model is called, such as a failing `api_key_command`. A run that was killed shows as incomplete. Records older than `records.keep_days` (30 by default) are pruned after each run.
