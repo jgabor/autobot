@@ -1,0 +1,14 @@
+[Unit]
+Description=autobot task runner
+
+[Service]
+Type=simple
+ExecStart=%h/.local/bin/autobot.sh
+WorkingDirectory=%h
+EnvironmentFile=-%h/.config/autobot/environment
+Restart=always
+RestartSec=1h
+TimeoutStopSec=30
+
+[Install]
+WantedBy=default.target
