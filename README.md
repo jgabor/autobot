@@ -1,13 +1,12 @@
 # autobot
 
-autobot runs recurring chores on your Linux machine with an AI model, while nobody is watching. You describe each chore in a Markdown file. autobot runs it on a schedule, keeps what it learned for next time, and leaves the result in one inbox.
+autobot runs recurring chores on your Linux machine with an AI model while nobody is watching. Each chore is a Markdown file with a paragraph of instructions and a short header. autobot runs it on a schedule, keeps what it learned for next time, and leaves the result in one inbox.
 
-- **Plain-language tasks.** A task is a paragraph of instructions plus a short header.
-- **Enforced access.** Each task lists the paths it may read and write. The code checks every file operation, so a task cannot touch anything else.
-- **Per-task schedules.** Hourly, daily, weekly or any cron expression.
-- **Memory you can see and undo.** What autobot learns is a small Markdown file per task, versioned in git.
-- **Any OpenAI-compatible endpoint.** Local models (Ollama, llama.cpp, vLLM) work as well as hosted ones.
-- **One binary.** No runtime dependencies, no daemon.
+- Each task lists the paths it may read and write, and the code checks every file operation against those lists.
+- Each task has its own schedule: hourly, daily, weekly or a cron expression.
+- What autobot learns goes in a small Markdown file per task, versioned in git.
+- Any OpenAI-compatible endpoint works, including local servers such as Ollama, llama.cpp and vLLM.
+- It is one binary with no runtime dependencies, started by a systemd timer rather than a daemon.
 
 The design is in [docs/design.md](docs/design.md).
 

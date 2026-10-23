@@ -1,6 +1,6 @@
 # Autobot v2 design
 
-Status: implemented on the `design/autobot-v2` branch
+Status: implemented
 Author: Jonathan Gabor
 Date: 2026-10-20
 
@@ -14,26 +14,26 @@ This document describes the redesign. The product stays the same. Three things c
 2. Each task has its own schedule and its own memory.
 3. Autobot becomes a small Go binary instead of a Bash script.
 
-## Background: the current version (v1)
+## Background: v1
 
-v1 is a single Bash script of about 750 lines, run by a user-level systemd unit.
+v1 was a single Bash script of about 750 lines, run by a user-level systemd unit.
 
-- Tasks are numbered Markdown files (`1-review-notes.md`, `2-audit-user-services.md`) in `~/.config/autobot/`. They run in filename order. `0-system.md` holds the system prompt and is required.
-- The model gets five tools: Read, Write, Edit, Grep and Glob. There is no shell and no network tool.
-- After each run, a reflection step rewrites one shared `~/.local/state/autobot/state.md`. It must contain fixed sections and exactly three "next-run improvements".
-- Scheduling uses `Restart=always` with `RestartSec=1h` on a simple service, so the script reruns an hour after each exit.
-- The provider is any OpenAI-compatible chat completions endpoint.
+- Tasks were numbered Markdown files (`1-review-notes.md`, `2-audit-user-services.md`) in `~/.config/autobot/`. They ran in filename order. `0-system.md` held the system prompt and was required.
+- The model got five tools: Read, Write, Edit, Grep and Glob. There was no shell and no network tool.
+- After each run, a reflection step rewrote one shared `~/.local/state/autobot/state.md`. It had to contain fixed sections and exactly three "next-run improvements".
+- Scheduling used `Restart=always` with `RestartSec=1h` on a simple service, so the script reran an hour after each exit.
+- The provider was any OpenAI-compatible chat completions endpoint.
 
 Problems seen in v1:
 
-- **Writes are not scoped.** Write and Edit accept any path the user can write, except the state file and system prompt. "Do not modify the originals" is only a request in the prompt.
-- **Bugs fail silently.** The Grep tool reads a misnamed variable. Under `set -u` that part of the pipeline fails, and the tool reports "No matches found" on every call.
-- **Every chore runs on one schedule.** All tasks run every hour. A weekly review and an hourly check cannot coexist.
-- **One shared memory, rewritten whole.** Small models drop facts when they rewrite the full file. There is no history, so a bad reflection cannot be undone.
-- **Onboarding is manual.** Users must write the system prompt from scratch and copy files into place. The environment file is only loaded by systemd, so a manual test run fails. A config error makes systemd retry an hour later without telling anyone.
-- **One failed task stops the rest of the run.**
-- **Results are hard to find.** Output goes to the journal or to files scattered across the user's folders.
-- **JSON is handled in Bash.** Every tool call starts several `jq` processes, and quoting is fragile.
+- **Writes were not scoped.** Write and Edit accepted any path the user could write, except the state file and system prompt. "Do not modify the originals" was only a request in the prompt.
+- **Bugs failed silently.** The Grep tool read a misnamed variable. Under `set -u` that part of the pipeline failed, and the tool reported "No matches found" on every call.
+- **Every chore ran on one schedule.** All tasks ran every hour. A weekly review and an hourly check could not coexist.
+- **One shared memory, rewritten whole.** Small models dropped facts when they rewrote the full file. There was no history, so a bad reflection could not be undone.
+- **Onboarding was manual.** Users had to write the system prompt from scratch and copy files into place. The environment file was only loaded by systemd, so a manual test run failed. A config error made systemd retry an hour later without telling anyone.
+- **Failures stopped the run.** One failed task stopped the rest of the run.
+- **Results were hard to find.** Output went to the journal or to files scattered across the user's folders.
+- **JSON was handled in Bash.** Every tool call started several `jq` processes, and quoting was fragile.
 
 ## Goals
 
@@ -148,7 +148,7 @@ Each task's final answer is saved to `~/.local/state/autobot/inbox/<task>/<times
 
 When the configuration itself is broken, a timer run writes a digest with the error, so the failure shows up in the inbox instead of only in the journal.
 
-Notifications are optional and set globally: `notify-send`, ntfy or email. `notify.on` is `always` or `failure`. Every notification has a deadline, so a stalled mail server cannot hold up the run. The user should have one place to check, not a list of folders.
+Notifications are optional and set globally: `notify-send`, ntfy or email. `notify.on` is `always` or `failure`. Every notification has a deadline, so a stalled mail server cannot hold up the run.
 
 ### Memory
 
@@ -189,7 +189,7 @@ A systemd user timer runs `autobot run --due` every 15 minutes. Autobot stores e
 - A missed run (machine asleep) runs once on the next check. It does not catch up on every missed slot.
 - If the last run time is in the future, the clock moved back, and the task is due rather than stuck.
 - Running a task by name also counts as its last run. A dry run does not.
-- When the provider or its key fails before any tool ran, the task did not really run. Its last run time stays, so the next check retries it, and the same failure is reported once rather than at every check. A provider failure after tools ran counts as a run, because the task may already have changed files.
+- When the provider or its key fails before any tool ran, the run does not count. Its last run time stays, so the next check retries it, and the same failure is reported once rather than at every check. A provider failure after tools ran counts as a run, because the task may already have changed files.
 - No process stays running between runs.
 - A lock file prevents overlapping runs.
 - `autobot init` prints the `loginctl enable-linger` command, because user services stop at logout without it. `autobot check` warns when lingering is off.
