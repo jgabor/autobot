@@ -12,7 +12,7 @@ api_key_env = "OPENAI_API_KEY"
 # api_key_command = "pass show autobot/api-key"
 timeout = "5m"
 # The model's context window, in tokens.
-context_tokens = 32000
+context_window = 32000
 
 [defaults]
 # Used when a task header leaves these out.

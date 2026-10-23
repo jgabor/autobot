@@ -27,7 +27,7 @@ type Config struct {
 	Prompt              string
 	Tools               Tools
 	MaxRounds           int
-	ContextTokens       int
+	ContextWindow       int
 	MaxToolOutputTokens int
 	// OnMessage is called for every message added to the conversation.
 	OnMessage func(provider.Message)
@@ -93,8 +93,8 @@ func Run(ctx context.Context, c Config) (Result, error) {
 			return int(float64(n) * ratio)
 		}
 		est := estimate()
-		if c.ContextTokens > 0 {
-			budget := c.ContextTokens * 85 / 100
+		if c.ContextWindow > 0 {
+			budget := c.ContextWindow * 85 / 100
 			for i := range res.Messages {
 				if est <= budget {
 					break
@@ -106,7 +106,7 @@ func Run(ctx context.Context, c Config) (Result, error) {
 				}
 			}
 			if est > budget {
-				return res, fmt.Errorf("%w (about %d tokens, limit %d)", ErrContext, est, c.ContextTokens)
+				return res, fmt.Errorf("%w (about %d tokens, limit %d)", ErrContext, est, c.ContextWindow)
 			}
 		}
 

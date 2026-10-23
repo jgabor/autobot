@@ -141,7 +141,7 @@ autobot memory undo          # revert the last change; run again to go further b
 | `provider.api_key_env` | `OPENAI_API_KEY` | Environment variable that holds the key |
 | `provider.api_key_command` | | Command that prints the key |
 | `provider.timeout` | `5m` | Per-request timeout |
-| `provider.context_tokens` | `32000` | The model's context window |
+| `provider.context_window` | `32000` | The model's context window, in tokens |
 | `defaults.schedule` | `daily` | Schedule for tasks that set none |
 | `defaults.max_rounds` | `20` | Tool rounds for tasks that set none |
 | `defaults.max_tool_output_tokens` | `3000` | Longer tool outputs are cut |

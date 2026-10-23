@@ -37,7 +37,7 @@ type Provider struct {
 	APIKeyEnv     string   `toml:"api_key_env"`
 	APIKeyCommand string   `toml:"api_key_command"`
 	Timeout       Duration `toml:"timeout"`
-	ContextTokens int      `toml:"context_tokens"`
+	ContextWindow int      `toml:"context_window"`
 }
 
 type Defaults struct {
@@ -95,7 +95,7 @@ func Default() Config {
 		Provider: Provider{
 			APIKeyEnv:     "OPENAI_API_KEY",
 			Timeout:       Duration{5 * time.Minute},
-			ContextTokens: 32000,
+			ContextWindow: 32000,
 		},
 		Defaults: Defaults{
 			Schedule:            "daily",
@@ -151,8 +151,8 @@ func (c Config) Validate() error {
 	if c.Provider.Timeout.Duration <= 0 {
 		errs = append(errs, errors.New("provider.timeout must be positive"))
 	}
-	if c.Provider.ContextTokens < 1000 {
-		errs = append(errs, errors.New("provider.context_tokens must be at least 1000"))
+	if c.Provider.ContextWindow < 1000 {
+		errs = append(errs, errors.New("provider.context_window must be at least 1000"))
 	}
 	if c.Defaults.MaxRounds < 1 {
 		errs = append(errs, errors.New("defaults.max_rounds must be positive"))

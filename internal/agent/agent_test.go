@@ -34,7 +34,7 @@ func run(t *testing.T, replies []provider.Reply, mod func(*Config)) (Result, *pr
 	t.Helper()
 	fake := &provider.Fake{Replies: replies}
 	tools := &fakeTools{out: map[string]string{}}
-	c := Config{Provider: fake, Model: "m", System: "sys", Prompt: "do it", Tools: tools, MaxRounds: 5, ContextTokens: 100000, MaxToolOutputTokens: 1000}
+	c := Config{Provider: fake, Model: "m", System: "sys", Prompt: "do it", Tools: tools, MaxRounds: 5, ContextWindow: 100000, MaxToolOutputTokens: 1000}
 	if mod != nil {
 		mod(&c)
 	}
@@ -151,7 +151,7 @@ func TestLongToolOutputIsCut(t *testing.T) {
 	}}
 	tools := &fakeTools{out: map[string]string{"big": strings.Repeat("w", 5000)}}
 	_, err := Run(context.Background(), Config{Provider: fake, Model: "m", System: "s", Prompt: "p", Tools: tools,
-		MaxRounds: 5, ContextTokens: 100000, MaxToolOutputTokens: 100})
+		MaxRounds: 5, ContextWindow: 100000, MaxToolOutputTokens: 100})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -183,7 +183,7 @@ func TestOldToolOutputMakesRoom(t *testing.T) {
 	}}
 	tools := &fakeTools{out: map[string]string{"read": big}}
 	res, err := Run(context.Background(), Config{Provider: fake, Model: "m", System: "s", Prompt: "p", Tools: tools,
-		MaxRounds: 5, ContextTokens: 5000, MaxToolOutputTokens: 4000})
+		MaxRounds: 5, ContextWindow: 5000, MaxToolOutputTokens: 4000})
 	if err != nil || res.Final != "done" {
 		t.Fatalf("got %+v %v", res.Final, err)
 	}
@@ -201,7 +201,7 @@ func TestOldToolOutputMakesRoom(t *testing.T) {
 
 func TestContextOverflow(t *testing.T) {
 	_, err := Run(context.Background(), Config{Provider: &provider.Fake{}, Model: "m", System: strings.Repeat("z", 40000), Prompt: "p",
-		MaxRounds: 5, ContextTokens: 1000})
+		MaxRounds: 5, ContextWindow: 1000})
 	if !errors.Is(err, ErrContext) {
 		t.Fatalf("want ErrContext, got %v", err)
 	}
@@ -216,7 +216,7 @@ func TestLoneClosingThinkTag(t *testing.T) {
 func TestToolErrorOutputIsCut(t *testing.T) {
 	fake := &provider.Fake{Replies: []provider.Reply{provider.Calls(provider.Call("c1", "noisy", `{}`)), provider.Text("ok")}}
 	_, err := Run(context.Background(), Config{Provider: fake, Model: "m", System: "s", Prompt: "p", Tools: noisyTools{},
-		MaxRounds: 5, ContextTokens: 100000, MaxToolOutputTokens: 100})
+		MaxRounds: 5, ContextWindow: 100000, MaxToolOutputTokens: 100})
 	if err != nil {
 		t.Fatal(err)
 	}

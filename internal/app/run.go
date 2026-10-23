@@ -372,7 +372,7 @@ func (a *App) runTask(ctx context.Context, cfg config.Config, prov provider.Prov
 		Prompt:              t.Prompt,
 		Tools:               toolset,
 		MaxRounds:           t.MaxRounds,
-		ContextTokens:       cfg.Provider.ContextTokens,
+		ContextWindow:       cfg.Provider.ContextWindow,
 		MaxToolOutputTokens: cfg.Defaults.MaxToolOutputTokens,
 		OnMessage: func(m provider.Message) {
 			if rec != nil {

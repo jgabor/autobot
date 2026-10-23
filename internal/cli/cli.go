@@ -7,13 +7,27 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"runtime/debug"
 
 	"github.com/jgabor/autobot/internal/app"
 	"github.com/jgabor/autobot/internal/paths"
 )
 
 // Version is set at build time with -ldflags "-X github.com/jgabor/autobot/internal/cli.Version=...".
+// When it is not, the module version that go install records is used.
 var Version = "dev"
+
+func version() string {
+	info, ok := debug.ReadBuildInfo()
+	return versionFrom(Version, info, ok)
+}
+
+func versionFrom(set string, info *debug.BuildInfo, ok bool) string {
+	if set != "dev" || !ok || info.Main.Version == "" || info.Main.Version == "(devel)" {
+		return set
+	}
+	return info.Main.Version
+}
 
 const usage = `autobot runs recurring chores with an AI model.
 
@@ -49,7 +63,7 @@ func Main(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 		fmt.Fprint(stdout, usage)
 		return 0
 	case "version", "--version":
-		fmt.Fprintln(stdout, "autobot", Version)
+		fmt.Fprintln(stdout, "autobot", version())
 		return 0
 	}
 	p, err := paths.FromEnv()

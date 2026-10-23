@@ -10,6 +10,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"runtime/debug"
 	"strings"
 	"sync"
 	"testing"
@@ -523,6 +524,26 @@ func TestUsageErrors(t *testing.T) {
 	var out, errOut bytes.Buffer
 	if Main(context.Background(), []string{"help"}, &out, &errOut) != 0 || !strings.Contains(out.String(), "autobot run --due") {
 		t.Error("help")
+	}
+}
+
+func TestVersionFromBuildInfo(t *testing.T) {
+	mod := func(v string) *debug.BuildInfo { return &debug.BuildInfo{Main: debug.Module{Version: v}} }
+	for _, c := range []struct {
+		set  string
+		info *debug.BuildInfo
+		ok   bool
+		want string
+	}{
+		{"dev", mod("v0.1.1"), true, "v0.1.1"},
+		{"v9.9.9", mod("v0.1.1"), true, "v9.9.9"},
+		{"dev", mod("(devel)"), true, "dev"},
+		{"dev", mod(""), true, "dev"},
+		{"dev", nil, false, "dev"},
+	} {
+		if got := versionFrom(c.set, c.info, c.ok); got != c.want {
+			t.Errorf("versionFrom(%q, %v): got %q, want %q", c.set, c.info, got, c.want)
+		}
 	}
 }
 
