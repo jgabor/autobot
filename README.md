@@ -114,7 +114,7 @@ More examples are in [examples/tasks](examples/tasks).
 | `run_command` | `commands` |
 | `web_search`, `web_fetch` | `network: true` (search uses Kagi; set `KAGI_API_KEY`) |
 
-`move` never overwrites a file. Moving a folder onto an existing folder merges the two. No tool deletes files.
+`move` never overwrites a file. `into` moves a file or folder into a folder, `to` renames it, and merging two folders takes `merge`. No tool deletes files.
 
 There is no shell. Allowed commands run in an empty temporary folder with a timeout. `web_fetch` refuses local and private addresses. Tasks with `network: true` do not see or change shared memory.
 

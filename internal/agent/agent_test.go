@@ -111,6 +111,19 @@ func TestToolErrorsGoBackToTheModel(t *testing.T) {
 	}
 }
 
+func TestMalformedToolCallSaysWhy(t *testing.T) {
+	_, call := provider.ParseToolCalls(`<tool_call>{"name": "read", "arguments": {</tool_call>`)
+	_, fake, tools, err := run(t, []provider.Reply{provider.Calls(call...), provider.Text("ok")}, nil)
+	if err != nil || len(tools.calls) != 0 {
+		t.Fatalf("calls %v, err %v", tools.calls, err)
+	}
+	msgs := fake.Requests[1].Messages
+	got := msgs[len(msgs)-1].Content
+	if !strings.HasPrefix(got, "Tool error: the tool call could not be read: ") || !strings.Contains(got, "ends early") || strings.Contains(got, `"text"`) {
+		t.Errorf("result: %q", got)
+	}
+}
+
 func TestMaxRounds(t *testing.T) {
 	var replies []provider.Reply
 	for range 4 {

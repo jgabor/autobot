@@ -79,17 +79,61 @@ func TestMoveFolder(t *testing.T) {
 	if !exists(filepath.Join(e.home, "dl/Images/d.pdf")) || exists(filepath.Join(e.home, "dl/Scans")) {
 		t.Fatal("folder was not renamed")
 	}
-	out := mustCall(t, e.set, "move", map[string]any{"from": "~/dl/Papers/", "to": "~/dl/Documents/"})
+	out := mustCall(t, e.set, "move", map[string]any{"from": "~/dl/Papers/", "to": "~/dl/Documents/", "merge": true})
 	if !strings.Contains(out, "2 entries") || exists(filepath.Join(e.home, "dl/Papers")) ||
 		!exists(filepath.Join(e.home, "dl/Documents/a.pdf")) || !exists(filepath.Join(e.home, "dl/Documents/deep/b.pdf")) {
 		t.Fatalf("merge: %q", out)
 	}
-	_, err := call(t, e.set, "move", map[string]any{"from": "~/dl/Images", "to": "~/dl/Documents"})
+	_, err := call(t, e.set, "move", map[string]any{"from": "~/dl/Images", "to": "~/dl/Documents", "merge": true})
 	if err == nil || !strings.Contains(err.Error(), "nothing was moved") || !strings.Contains(err.Error(), "c.pdf") {
 		t.Fatalf("merge with a clash: %v", err)
 	}
 	if !exists(filepath.Join(e.home, "dl/Images/d.pdf")) || exists(filepath.Join(e.home, "dl/Documents/d.pdf")) {
 		t.Error("a merge with a clash moved something")
+	}
+	for _, args := range []map[string]any{
+		{"from": "~/dl/Documents/c.pdf", "to": "~/dl/Images", "merge": true},
+		{"from": "~/dl/Images", "to": "~/dl/Missing", "merge": true},
+	} {
+		if _, err := call(t, e.set, "move", args); err == nil || !strings.Contains(err.Error(), "two existing folders") {
+			t.Errorf("merge %v: %v", args, err)
+		}
+	}
+}
+
+func TestMoveFolderInside(t *testing.T) {
+	e := newEnv(t, nil, []string{"~/dl/"}, nil)
+	write(t, filepath.Join(e.home, "dl/Sidebery/a.json"), "a")
+	write(t, filepath.Join(e.home, "dl/Tools/b.zip"), "b")
+	write(t, filepath.Join(e.home, "dl/Work/x.pdf"), "x")
+	write(t, filepath.Join(e.home, "dl/Other/Work/y.pdf"), "y")
+
+	mustCall(t, e.set, "move", map[string]any{"from": "~/dl/Sidebery", "to": "~/dl/Work"})
+	if !exists(filepath.Join(e.home, "dl/Work/Sidebery/a.json")) || exists(filepath.Join(e.home, "dl/Work/a.json")) {
+		t.Fatal("folder was not moved inside the existing folder")
+	}
+	mustCall(t, e.set, "move", map[string]any{"from": "~/dl/Tools", "to": "~/dl/Software/"})
+	if !exists(filepath.Join(e.home, "dl/Software/Tools/b.zip")) {
+		t.Fatal("folder was not moved inside a new folder")
+	}
+	_, err := call(t, e.set, "move", map[string]any{"from": "~/dl/Other/Work", "to": "~/dl/"})
+	if err == nil || !strings.Contains(err.Error(), "already exists") || !exists(filepath.Join(e.home, "dl/Other/Work/y.pdf")) {
+		t.Fatalf("moving onto a folder of the same name: %v", err)
+	}
+
+	// into needs no trailing / to keep the name, for a new folder too.
+	mustCall(t, e.set, "move", map[string]any{"from": "~/dl/Software/Tools", "into": "~/dl/Code"})
+	mustCall(t, e.set, "move", map[string]any{"from": "~/dl/Work/x.pdf", "into": "~/dl/Papers"})
+	if !exists(filepath.Join(e.home, "dl/Code/Tools/b.zip")) || !exists(filepath.Join(e.home, "dl/Papers/x.pdf")) {
+		t.Fatal("into did not keep the names")
+	}
+	for _, args := range []map[string]any{
+		{"from": "~/dl/Papers/x.pdf", "into": "~/dl/Work", "to": "~/dl/Work/x.pdf"},
+		{"from": "~/dl/Code", "into": "~/dl/Work", "merge": true},
+	} {
+		if _, err := call(t, e.set, "move", args); err == nil || !strings.Contains(err.Error(), "into on its own") {
+			t.Errorf("move %v: %v", args, err)
+		}
 	}
 }
 
@@ -105,7 +149,7 @@ func TestMoveDryRun(t *testing.T) {
 	if !exists(filepath.Join(e.home, "dl/a.pdf")) || exists(filepath.Join(e.home, "dl/Documents")) || !exists(filepath.Join(e.home, "dl/Old/b.pdf")) {
 		t.Fatal("a dry run changed the disk")
 	}
-	if m := e.set.Moved(); len(m) != 2 || m[1].To != filepath.Join(e.home, "dl/New/b.pdf") {
+	if m := e.set.Moved(); len(m) != 2 || m[1].To != filepath.Join(e.home, "dl/New/Old") {
 		t.Errorf("dry-run moves: %+v", m)
 	}
 }

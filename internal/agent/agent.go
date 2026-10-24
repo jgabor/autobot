@@ -159,6 +159,12 @@ func runTool(ctx context.Context, c Config, call provider.ToolCall) string {
 		return "Tool error: the tool call has no function name"
 	}
 	args := call.Function.Arguments
+	if name == provider.MalformedToolCall {
+		var m struct{ Error string }
+		if json.Unmarshal([]byte(args), &m) == nil && m.Error != "" {
+			return "Tool error: " + m.Error
+		}
+	}
 	if strings.TrimSpace(args) == "" {
 		args = "{}"
 	}

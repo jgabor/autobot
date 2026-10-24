@@ -137,10 +137,12 @@ func (s *Set) Definitions() []provider.Tool {
 			"new_string":  str("Replacement text."),
 			"replace_all": map[string]any{"type": "boolean", "description": "Replace every occurrence."},
 		}, "path", "old_string", "new_string")),
-		tool("move", "Move or rename a file or folder. Both paths must be writable. Never overwrites: an existing destination file is an error. Moving a file to a folder (an existing one, or a path ending in /) keeps its name. Moving a folder onto an existing folder merges them: every entry is moved in, then the empty source folder is removed; if any name already exists, nothing is moved.", object(map[string]any{
-			"from": str("File or folder to move."),
-			"to":   str("New path, or a folder to move into."),
-		}, "from", "to")),
+		tool("move", "Move or rename a file or folder. Both paths must be writable. Never overwrites: an existing destination is an error. To put a file or folder inside a folder under its own name, give into; the folder is created if missing. To rename, give to with the full new path; if to is an existing folder or ends in /, the item goes inside it instead. With merge and to, a folder's entries are moved into another existing folder, then the empty source folder is removed; if any name already exists, nothing is moved.", object(map[string]any{
+			"from":  str("File or folder to move."),
+			"into":  str("Folder to move from into, keeping its name. Use instead of to."),
+			"to":    str("Full new path, for a rename or a merge."),
+			"merge": map[string]any{"type": "boolean", "description": "Merge the folder from into the existing folder to, instead of moving it inside."},
+		}, "from")),
 	}
 	if len(s.o.Commands) > 0 {
 		defs = append(defs, tool("run_command",

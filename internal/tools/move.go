@@ -13,8 +13,10 @@ import (
 )
 
 type moveArgs struct {
-	From string `json:"from"`
-	To   string `json:"to"`
+	From  string `json:"from"`
+	To    string `json:"to"`
+	Into  string `json:"into"`
+	Merge bool   `json:"merge"`
 }
 
 // Move is one file or folder the tools moved, or would move in a dry run.
@@ -38,8 +40,16 @@ func (s *Set) lexical(path string) string {
 }
 
 func (s *Set) move(a moveArgs) (string, error) {
+	// into names the folder outright, so a missing trailing / cannot turn
+	// "move into Code" into "rename to Code".
+	if a.Into != "" {
+		if a.To != "" || a.Merge {
+			return "", errors.New("give into on its own, without to or merge")
+		}
+		a.To = strings.TrimSuffix(a.Into, "/") + "/"
+	}
 	if a.From == "" || a.To == "" {
-		return "", errors.New("from and to are required")
+		return "", errors.New("from and to (or into) are required")
 	}
 	from, err := s.o.Policy.CheckWrite(a.From)
 	if err != nil {
@@ -65,11 +75,15 @@ func (s *Set) move(a moveArgs) (string, error) {
 	}
 	toInfo, err := os.Stat(to)
 	toIsDir := err == nil && toInfo.IsDir()
-	if src.IsDir() && toIsDir {
+	if a.Merge {
+		if !src.IsDir() || !toIsDir {
+			return "", errors.New("merge needs two existing folders")
+		}
 		return s.merge(from, to)
 	}
+	// Like mv: a file or folder moved to a folder goes inside it.
 	dest := to
-	if !src.IsDir() && (toIsDir || strings.HasSuffix(a.To, "/")) {
+	if toIsDir || strings.HasSuffix(a.To, "/") {
 		dest = filepath.Join(to, filepath.Base(from))
 	}
 	if dest, err = s.o.Policy.CheckWrite(dest); err != nil {
