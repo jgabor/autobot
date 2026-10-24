@@ -50,16 +50,44 @@ func (s *Store) Load(taskID string) (task, shared *Doc, err error) {
 // ErrNoChange means the changes left both files as they were.
 var ErrNoChange = errors.New("the changes leave memory as it was")
 
+func (s *Store) promptFile(taskID string) string {
+	return filepath.Join(s.Dir, taskID+".prompt")
+}
+
+// PromptHash returns the hash of the task prompt that the task's memory was
+// last reviewed against, or "" if none is recorded.
+func (s *Store) PromptHash(taskID string) (string, error) {
+	data, err := os.ReadFile(s.promptFile(taskID))
+	if errors.Is(err, fs.ErrNotExist) {
+		return "", nil
+	}
+	return strings.TrimSpace(string(data)), err
+}
+
 // Change applies ops for a task, enforces the size limit, writes the files
 // that changed and commits. On any error the files are left as they were.
 func (s *Store) Change(taskID string, ops []Op, message string) error {
+	_, err := s.Review(taskID, ops, "", message)
+	return err
+}
+
+// Review is Change that also records promptHash as the task prompt the
+// memory was reviewed against, in the same commit, so undo reverts both.
+// An empty promptHash leaves the record as it was. It reports whether the
+// memory files changed, since a new prompt alone is still committed.
+func (s *Store) Review(taskID string, ops []Op, promptHash, message string) (bool, error) {
 	task, shared, err := s.Load(taskID)
 	if err != nil {
-		return err
+		return false, err
 	}
+	oldHash, err := s.PromptHash(taskID)
+	if err != nil {
+		return false, err
+	}
+	newPrompt := promptHash != "" && promptHash != oldHash
 	nt, ns, err := Apply(task, shared, ops)
 	if err != nil {
-		return err
+		return false, err
 	}
 	type file struct{ name, before, after string }
 	var changed []file
@@ -70,16 +98,16 @@ func (s *Store) Change(taskID string, ops []Op, message string) error {
 		// A file already over the limit, for example after a large import or
 		// a hand edit, may still shrink or stay the same size.
 		if s.MaxBytes > 0 && len(f.after) > s.MaxBytes && len(f.after) > len(f.before) {
-			return fmt.Errorf("%s.md would be %d bytes, over the %d byte limit; remove or shorten items", f.name, len(f.after), s.MaxBytes)
+			return false, fmt.Errorf("%s.md would be %d bytes, over the %d byte limit; remove or shorten items", f.name, len(f.after), s.MaxBytes)
 		}
 		changed = append(changed, f)
 	}
-	if len(changed) == 0 {
-		return ErrNoChange
+	if len(changed) == 0 && !newPrompt {
+		return false, ErrNoChange
 	}
 	repo, err := s.open()
 	if err != nil {
-		return err
+		return false, err
 	}
 	// Commit hand edits first, so undo never reverts them along with a reflection.
 	first := manualEdit
@@ -87,14 +115,22 @@ func (s *Store) Change(taskID string, ops []Op, message string) error {
 		first = "start memory history"
 	}
 	if err := s.commit(repo, first); err != nil {
-		return err
+		return false, err
 	}
 	for _, f := range changed {
 		if err := writeAtomic(s.file(f.name), f.after); err != nil {
-			return err
+			return false, err
 		}
 	}
-	return s.commit(repo, message)
+	if newPrompt {
+		if err := writeAtomic(s.promptFile(taskID), promptHash+"\n"); err != nil {
+			return false, err
+		}
+	}
+	if err := s.commit(repo, message); err != nil {
+		return false, err
+	}
+	return len(changed) > 0, nil
 }
 
 const manualEdit = "manual edit"

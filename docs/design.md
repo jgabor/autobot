@@ -139,6 +139,7 @@ Memory lives in `~/.local/state/autobot/memory/`:
 
 - `shared.md` for facts useful to every task. Item IDs start with `s-`.
 - `<task>.md` for each task. Item IDs start with `m-`.
+- `<task>.prompt` with a hash of the task prompt that the task's memory was last reviewed against.
 
 Each file is Markdown with five sections: Locations, Procedures, Gotchas, Insights and Follow-ups. Each item is one bullet with an ID, such as `- [m-3] Drafts are in _old/; skip them.` People can edit the files by hand. Lines without an ID get one, and other text is kept as items rather than dropped.
 
@@ -151,7 +152,9 @@ Both files are part of the task's system prompt. After a task runs, reflection s
 ]
 ```
 
-Autobot validates every change before applying any. An invalid list, or one that would push a file over the size limit (`memory.max_bytes`, 8000 bytes by default), is sent back to the model once with the error. The limit applies only to files the list changes, and a file that is already over the limit, for example after a large import, may still shrink. A list that leaves both files as they were is recorded as "no memory changes" and makes no commit. If the second answer also fails, memory is left untouched and the run record says why.
+Autobot validates every change before applying any. An invalid list, or one that would push a file over the size limit (`memory.max_bytes`, 8000 bytes by default), is sent back to the model once with the error. The limit applies only to files the list changes, and a file that is already over the limit, for example after a large import, may still shrink. A list that leaves both files as they were is recorded as "no memory changes" and makes no commit, unless it is the first review against a new task prompt (see below). If the second answer also fails, memory is left untouched and the run record says why.
+
+The task prompt is the user's current intent, so it wins over memory. Reflection is told to remove or update task items that contradict the prompt, and to keep items the prompt does not mention. It is not told to remove a shared item only because it conflicts with one task's prompt, since shared items serve every task. A run mostly follows memory without showing a conflict, so reflection also learns when the prompt changed: after each accepted reflection, autobot records a hash of the prompt in `<task>.prompt`, in the same commit. When the hash differs at the next reflection, or when there is task memory but no recorded hash, reflection is asked to check every task item against the prompt. Undo reverts the record along with the items, so an undone review is asked for again. A rejected reflection records nothing.
 
 The memory folder is a git repository, written with a pure Go git library, so no `git` binary is needed. Every accepted reflection is one commit. Hand edits are committed separately at the start of each task run, so undoing a reflection never undoes them. `autobot memory diff` shows what changed, and `autobot memory undo` reverts the last change. Running undo again steps one more change back. Undo refuses to discard uncommitted hand edits unless given `--force`, and refuses to revert a commit of hand edits.
 

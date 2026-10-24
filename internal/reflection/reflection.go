@@ -5,6 +5,8 @@ package reflection
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -50,6 +52,8 @@ Keep:
 Rules:
 - Only record durable knowledge. Skip one-off events and narration.
 - Remove items that are wrong, stale, done or duplicated. Update items that changed.
+- The task prompt is the user's current intent and wins over memory. Remove or update task items that contradict it, such as an old limit, a file it no longer uses or a step it replaced. Keep items it does not mention.
+- Shared items serve every task. Do not remove one only because it conflicts with this task's prompt.
 - Use scope "shared" only for facts every task benefits from. Default to the task.
 - Never record secrets, keys, passwords or personal data beyond what the task needs.
 - Each item is one short line.
@@ -107,8 +111,20 @@ func Run(ctx context.Context, p provider.Provider, model string, store *memory.S
 	if err != nil {
 		return Outcome{}, err
 	}
+	reviewed, err := store.PromptHash(in.TaskID)
+	if err != nil {
+		return Outcome{}, err
+	}
+	hash := promptHash(in.Prompt)
 	var user strings.Builder
-	fmt.Fprintf(&user, "Task: %s\n\nTask prompt:\n%s\n\nStatus: %s\n", in.TaskID, in.Prompt, in.Status)
+	fmt.Fprintf(&user, "Task: %s\n\nTask prompt:\n%s\n\n", in.TaskID, in.Prompt)
+	switch {
+	case reviewed != "" && reviewed != hash:
+		user.WriteString("The task prompt changed since task memory was last reviewed. Check every task memory item against it, and remove or update the ones that contradict it.\n\n")
+	case reviewed == "" && task.Len() > 0:
+		user.WriteString("There is no record of which task prompt the task memory was written for. Check every task memory item against the prompt above, and remove or update the ones that contradict it.\n\n")
+	}
+	fmt.Fprintf(&user, "Status: %s\n", in.Status)
 	if in.Error != "" {
 		fmt.Fprintf(&user, "Error: %s\n", in.Error)
 	}
@@ -142,10 +158,13 @@ func Run(ctx context.Context, p provider.Provider, model string, store *memory.S
 			}
 			msg := fmt.Sprintf("reflect: %s (%s)", in.TaskID, in.RunID)
 			if len(ops) == 0 {
-				return Outcome{Summary: "no memory changes"}, nil
+				msg = fmt.Sprintf("record task prompt: %s (%s)", in.TaskID, in.RunID)
 			}
-			err = store.Change(in.TaskID, ops, msg)
-			if errors.Is(err, memory.ErrNoChange) {
+			// Recording the prompt marks memory as reviewed against it, even
+			// when nothing needed to change.
+			var changed bool
+			changed, err = store.Review(in.TaskID, ops, hash, msg)
+			if errors.Is(err, memory.ErrNoChange) || (err == nil && !changed) {
 				return Outcome{Summary: "no memory changes"}, nil
 			}
 			if err == nil {
@@ -158,6 +177,12 @@ func Run(ctx context.Context, p provider.Provider, model string, store *memory.S
 			provider.Message{Role: "user", Content: "That change list was rejected: " + err.Error() + "\nReply with a corrected JSON array only."})
 	}
 	return Outcome{}, fmt.Errorf("reflection rejected, memory unchanged: %w", lastErr)
+}
+
+// promptHash identifies a version of a task prompt.
+func promptHash(prompt string) string {
+	sum := sha256.Sum256([]byte(strings.TrimSpace(prompt)))
+	return hex.EncodeToString(sum[:])
 }
 
 func describe(ops []memory.Op) string {

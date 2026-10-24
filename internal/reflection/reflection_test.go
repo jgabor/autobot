@@ -89,15 +89,80 @@ func TestInvalidChangesLeaveMemoryUntouched(t *testing.T) {
 
 func TestEmptyListChangesNothing(t *testing.T) {
 	store := newStore(t)
-	fake := &provider.Fake{Replies: []provider.Reply{provider.Text("<think>nothing new</think>[]")}}
+	fake := &provider.Fake{Replies: []provider.Reply{provider.Text("<think>nothing new</think>[]"), provider.Text("[]")}}
 	out, err := Run(context.Background(), fake, "m", store, input(), nil)
 	if err != nil || out.Summary != "no memory changes" {
 		t.Fatalf("got %+v %v", out, err)
 	}
-	if _, err := os.Stat(store.Dir); err == nil {
-		if _, err := store.Diff(1); err != memory.ErrNoHistory {
-			t.Fatal("empty list must not commit")
+	// The first review records the prompt, so later changes to it are noticed.
+	if diff, err := store.Diff(1); err != nil || !strings.Contains(diff, "record task prompt: notes (run1)") {
+		t.Fatalf("first review must record the prompt: %v\n%s", err, diff)
+	}
+	in := input()
+	in.RunID = "run2"
+	if out, err := Run(context.Background(), fake, "m", store, in, nil); err != nil || out.Summary != "no memory changes" {
+		t.Fatalf("got %+v %v", out, err)
+	}
+	if diff, _ := store.Diff(1); strings.Contains(diff, "run2") {
+		t.Fatal("empty list with the same prompt must not commit")
+	}
+}
+
+func TestPromptChangeNotice(t *testing.T) {
+	const notice = "task prompt changed since task memory was last reviewed"
+	const unknown = "no record of which task prompt"
+	reflect := func(store *memory.Store, prompt string) string {
+		t.Helper()
+		in := input()
+		in.Prompt = prompt
+		fake := &provider.Fake{Replies: []provider.Reply{provider.Text("[]")}}
+		if _, err := Run(context.Background(), fake, "m", store, in, nil); err != nil {
+			t.Fatal(err)
 		}
+		if !strings.Contains(fake.Requests[0].Messages[0].Content, "task prompt is the user's current intent and wins over memory") {
+			t.Error("system prompt lacks the prompt-wins rule")
+		}
+		return fake.Requests[0].Messages[1].Content
+	}
+
+	store := newStore(t)
+	if got := reflect(store, "Move up to 50 files."); strings.Contains(got, notice) || strings.Contains(got, unknown) {
+		t.Errorf("empty memory with no record must get no notice:\n%s", got)
+	}
+	if got := reflect(store, "Move up to 50 files."); strings.Contains(got, notice) || strings.Contains(got, unknown) {
+		t.Errorf("unchanged prompt must get no notice:\n%s", got)
+	}
+	if got := reflect(store, "Move up to 100 files."); !strings.Contains(got, notice) {
+		t.Errorf("changed prompt must get the notice:\n%s", got)
+	}
+	if got := reflect(store, "Move up to 100 files."); strings.Contains(got, notice) {
+		t.Errorf("notice must stop once the new prompt was reviewed:\n%s", got)
+	}
+
+	// Memory written before prompts were recorded is checked once.
+	old := newStore(t)
+	if err := old.Change("notes", []memory.Op{{Op: "add", Section: "Procedures", Text: "move up to 50 files"}}, "seed"); err != nil {
+		t.Fatal(err)
+	}
+	if got := reflect(old, "Move up to 100 files."); !strings.Contains(got, unknown) {
+		t.Errorf("memory with no recorded prompt must get the notice:\n%s", got)
+	}
+	if got := reflect(old, "Move up to 100 files."); strings.Contains(got, unknown) {
+		t.Errorf("notice must stop once the prompt was recorded:\n%s", got)
+	}
+}
+
+func TestFailedReflectionKeepsThePromptNotice(t *testing.T) {
+	store := newStore(t)
+	if _, err := store.Review("notes", []memory.Op{{Op: "add", Section: "Procedures", Text: "move up to 50 files"}}, promptHash("old"), "seed"); err != nil {
+		t.Fatal(err)
+	}
+	fake := &provider.Fake{Replies: []provider.Reply{provider.Text("no"), provider.Text("still no")}}
+	if _, err := Run(context.Background(), fake, "m", store, input(), nil); err == nil {
+		t.Fatal("want rejection")
+	}
+	if got, _ := store.PromptHash("notes"); got != promptHash("old") {
+		t.Fatal("a rejected reflection must not record the new prompt")
 	}
 }
 

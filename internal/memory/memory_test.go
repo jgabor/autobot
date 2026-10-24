@@ -103,6 +103,46 @@ func TestApplyRejectsInvalidLists(t *testing.T) {
 	}
 }
 
+func TestReviewRecordsPromptWithChanges(t *testing.T) {
+	s := &Store{Dir: filepath.Join(t.TempDir(), "memory"), MaxBytes: 2000}
+	if h, err := s.PromptHash("notes"); err != nil || h != "" {
+		t.Fatalf("no record yet: %q %v", h, err)
+	}
+	if changed, err := s.Review("notes", []Op{{Op: "add", Section: "Locations", Text: "fact"}}, "aaa", "reflect 1"); err != nil || !changed {
+		t.Fatal(err)
+	}
+	if changed, err := s.Review("notes", []Op{{Op: "add", Section: "Gotchas", Text: "gotcha"}}, "bbb", "reflect 2"); err != nil || !changed {
+		t.Fatal(err)
+	}
+	if h, _ := s.PromptHash("notes"); h != "bbb" {
+		t.Fatalf("hash %q", h)
+	}
+	if _, err := s.Review("notes", nil, "bbb", "reflect 3"); err != ErrNoChange {
+		t.Fatalf("same prompt and no ops: want ErrNoChange, got %v", err)
+	}
+	if _, err := s.Review("notes", nil, "", "reflect 3"); err != ErrNoChange {
+		t.Fatalf("no prompt and no ops: want ErrNoChange, got %v", err)
+	}
+	// Undo reverts the items and the prompt record together.
+	if _, err := s.Undo(false); err != nil {
+		t.Fatal(err)
+	}
+	task, _, _ := s.Load("notes")
+	if h, _ := s.PromptHash("notes"); h != "aaa" || strings.Contains(task.Render(), "gotcha") {
+		t.Fatalf("after undo: hash %q\n%s", h, task.Render())
+	}
+	if dirty, _ := s.Dirty(); dirty {
+		t.Fatal("review must commit the prompt record")
+	}
+	// A new prompt alone is committed but does not count as a memory change.
+	if changed, err := s.Review("notes", []Op{{Op: "update", ID: "m-1", Text: "fact"}}, "ccc", "record"); err != nil || changed {
+		t.Fatalf("prompt only: changed %v, err %v", changed, err)
+	}
+	if h, _ := s.PromptHash("notes"); h != "ccc" {
+		t.Fatalf("hash %q", h)
+	}
+}
+
 func TestStoreChangeDiffUndo(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "memory")
 	s := &Store{Dir: dir, MaxBytes: 2000}
